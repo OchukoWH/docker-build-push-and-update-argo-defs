@@ -1,0 +1,78 @@
+name: Docker Image CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    runs-on: self-hosted
+    
+    steps:
+    - uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    
+    - name: Extract short SHA
+      id: sha
+      run: echo "short_sha=${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
+      
+    - name: Build and push vprofiledb image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./Docker-files/db
+        file: ./Docker-files/db/Dockerfile
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/vprofiledb3:latest,${{ secrets.DOCKERHUB_USERNAME }}/vprofiledb3:${{ steps.sha.outputs.short_sha }}
+      
+    - name: Build and push vprofileapp image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Docker-files/app/multistage/Dockerfile
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/vprofileapp3:latest,${{ secrets.DOCKERHUB_USERNAME }}/vprofileapp3:${{ steps.sha.outputs.short_sha }}
+      
+    - name: Build and push vprofileweb image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./Docker-files/web
+        file: ./Docker-files/web/Dockerfile
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/vprofileweb3:latest,${{ secrets.DOCKERHUB_USERNAME }}/vprofileweb3:${{ steps.sha.outputs.short_sha }}
+
+    - name: Update ArgoCD manifests
+      env:
+        GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+        DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        SHORT_SHA: ${{ steps.sha.outputs.short_sha }}
+      run: |
+        git clone https://github.com/OchukoWH/automatic-updates-argo-defs.git gitops
+        cd gitops
+        
+        # Update appdeploy.yaml - match any username/vprofileapp pattern
+        sed -i "s|image: .*/vprofileapp.*|image: ${DOCKERHUB_USERNAME}/vprofileapp3:${SHORT_SHA}|g" vprofile/appdeploy.yaml
+        
+        # Update dbdeploy.yaml - match any username/vprofiledb pattern
+        sed -i "s|image: .*/vprofiledb.*|image: ${DOCKERHUB_USERNAME}/vprofiledb3:${SHORT_SHA}|g" vprofile/dbdeploy.yaml
+        
+        # Update webdeploy.yaml - match any username/vprofileweb pattern
+        sed -i "s|image: .*/vprofileweb.*|image: ${DOCKERHUB_USERNAME}/vprofileweb3:${SHORT_SHA}|g" vprofile/webdeploy.yaml
+        
+        # Commit changes
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+        git add vprofile/appdeploy.yaml vprofile/dbdeploy.yaml vprofile/webdeploy.yaml
+        TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        git commit -m "Update images to ${SHORT_SHA} - ${TIMESTAMP}" || exit 0
+        
+        # Push
+        git push https://${GIT_TOKEN}@github.com/OchukoWH/automatic-updates-argo-defs.git main
