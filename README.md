@@ -191,22 +191,44 @@ Ensure these repositories exist in your Docker Hub account (or update the workfl
 
 The workflow triggers automatically on **every push to the `main` branch**.
 
-### Workflow Steps
+### Workflow Jobs
 
-1. **Checkout Code**: Checks out the repository code
-2. **Setup Docker Buildx**: Sets up Docker Buildx for optimized builds
-3. **Login to Docker Hub**: Authenticates using `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`
-4. **Extract Short SHA**: Extracts the first 7 characters of the Git commit SHA
-5. **Build and Push Images**: Builds and pushes three Docker images:
-   - Database image: `vprofiledb3:latest` and `vprofiledb3:{sha}`
-   - Application image: `vprofileapp3:latest` and `vprofileapp3:{sha}`
-   - Web image: `vprofileweb3:latest` and `vprofileweb3:{sha}`
-6. **Update ArgoCD Manifests**:
-   - Clones the ArgoCD repository (configured in workflow file)
-   - Updates `vprofile/appdeploy.yaml` with the new application image tag
-   - Updates `vprofile/dbdeploy.yaml` with the new database image tag
-   - Updates `vprofile/webdeploy.yaml` with the new web image tag
-   - Commits and pushes the changes back to the ArgoCD repository
+The workflow consists of **4 parallel-optimized jobs**:
+
+#### Job 1: Build Database Image (`build-database`)
+- Checks out the repository code
+- Sets up Docker Buildx for optimized builds
+- Authenticates with Docker Hub
+- Extracts the commit SHA
+- Builds and pushes `vprofiledb3:latest` and `vprofiledb3:{sha}`
+
+#### Job 2: Build Application Image (`build-application`)
+- Checks out the repository code
+- Sets up Docker Buildx for optimized builds
+- Authenticates with Docker Hub
+- Extracts the commit SHA
+- Builds and pushes `vprofileapp3:latest` and `vprofileapp3:{sha}`
+
+#### Job 3: Build Web Image (`build-web`)
+- Checks out the repository code
+- Sets up Docker Buildx for optimized builds
+- Authenticates with Docker Hub
+- Extracts the commit SHA
+- Builds and pushes `vprofileweb3:latest` and `vprofileweb3:{sha}`
+
+#### Job 4: Update ArgoCD Manifests (`update-manifests`)
+**Runs after all build jobs complete successfully**
+- Clones the ArgoCD repository (configured in workflow file)
+- Updates `vprofile/appdeploy.yaml` with the new application image tag
+- Updates `vprofile/dbdeploy.yaml` with the new database image tag
+- Updates `vprofile/webdeploy.yaml` with the new web image tag
+- Commits and pushes the changes back to the ArgoCD repository
+
+**Benefits of multiple jobs:**
+- ✅ The three build jobs run in parallel for faster execution
+- ✅ Manifest updates only happen if all builds succeed
+- ✅ Better visibility of which build failed (if any)
+- ✅ Easier to debug and maintain
 
 ### Image Tagging Strategy
 
