@@ -349,14 +349,4 @@ If you see permission errors:
 - **Docker Hub**: Check your Docker Hub repositories for pushed images
 - **ArgoCD**: Monitor ArgoCD for automatic syncs triggered by manifest updates
 
-## Support
 
-For issues or questions:
-1. Check the workflow logs in GitHub Actions
-2. Review the troubleshooting section above
-3. Check runner logs on the EC2 instance
-4. Verify all secrets are correctly configured
-
-## License
-
-[Add your license here]
