@@ -7,9 +7,9 @@ This repository contains a CI/CD pipeline that automatically builds Docker image
 When code is pushed to the `main` branch, this GitHub Actions workflow:
 
 1. **Builds** three Docker images:
-   - `vprofiledb2` - Database container
-   - `vprofileapp2` - Application container  
-   - `vprofileweb2` - Web/NGINX container
+   - `vprofiledb3` - Database container
+   - `vprofileapp3` - Application container  
+   - `vprofileweb3` - Web/NGINX container
 
 2. **Pushes** the images to Docker Hub with two tags:
    - `latest` - Points to the most recent build
@@ -111,7 +111,21 @@ Add the following secrets:
 3. Create a token with **Read & Write** permissions
 4. Copy and save the token (you won't be able to see it again!)
 
-#### Creating GitHub Personal Access Token
+#### Creating GitHub Personal Access Token (GIT_TOKEN)
+
+The `GIT_TOKEN` is a GitHub Personal Access Token used to authenticate when pushing changes to the ArgoCD GitOps repository. This token allows the workflow to automatically commit and push updated Kubernetes manifests.
+
+**What it does:**
+- Authenticates the workflow to push commits to the ArgoCD repository (`OchukoWH/automatic-updates-argo-defs`)
+- Grants the necessary permissions to update Kubernetes manifest files in the GitOps repository
+- Used in the git push command: `git push https://${GIT_TOKEN}@github.com/...`
+
+**Why it's needed:**
+- After building and pushing Docker images, the workflow needs to update the Kubernetes manifests in the ArgoCD repository
+- GitHub requires authentication to push to a repository
+- The token provides the necessary write permissions
+
+**How to create it:**
 
 1. Go to GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)**
 2. Click **Generate new token (classic)**
@@ -119,26 +133,57 @@ Add the following secrets:
 4. Select the `repo` scope (full control of private repositories)
 5. Click **Generate token**
 6. Copy the token immediately (you won't be able to see it again!)
+7. Add it as a secret in your repository:
+   - Go to your repo → **Settings** → **Secrets and variables** → **Actions**
+   - Click **"New repository secret"**
+   - Name: `GIT_TOKEN`
+   - Value: paste the token you just copied
+
+**Important:** Ensure the token has access to the ArgoCD repository. If it's a private repository, the token owner must have access to it.
+
 
 ### Step 3: Grant Repository Access to ArgoCD Repo
 
-The workflow needs permission to push to the ArgoCD repository (`OchukoWH/automatic-updates-argo-defs`).
+The workflow needs permission to push to the ArgoCD GitOps repository.
 
-**Option 1: Using Personal Access Token (Recommended)**
-- Use the `GIT_TOKEN` secret created above
-- Ensure the token has access to the ArgoCD repository
+**Using Personal Access Token (Recommended)**
+- Use the `GIT_TOKEN` secret created in Step 2
+- Ensure the token has access to the ArgoCD repository specified in `ARGOCD_REPO`
+- The token must have write permissions to commit and push changes
 
-**Option 2: Using GitHub App or Deploy Key**
-- Create a GitHub App or deploy key with write access to the ArgoCD repository
-- Configure it as a secret in this repository
+### Step 4: Update Workflow with Your ArgoCD Repository URL
 
-### Step 4: Verify Docker Hub Repositories
+**IMPORTANT:** You must update the workflow file (`.github/workflows/docker-image.yaml`) with your ArgoCD GitOps repository URL.
+
+Find and replace these two lines in the workflow:
+
+**Line 58 (git clone):**
+```yaml
+git clone https://github.com/OchukoWH/automatic-updates-argo-defs.git gitops
+```
+Change to:
+```yaml
+git clone https://github.com/YOUR_USERNAME/YOUR_ARGOCD_REPO.git gitops
+```
+
+**Line 78 (git push):**
+```yaml
+git push https://${GIT_TOKEN}@github.com/OchukoWH/automatic-updates-argo-defs.git main
+```
+Change to:
+```yaml
+git push https://${GIT_TOKEN}@github.com/YOUR_USERNAME/YOUR_ARGOCD_REPO.git main
+```
+
+Replace `YOUR_USERNAME` with your GitHub username and `YOUR_ARGOCD_REPO` with your ArgoCD repository name.
+
+### Step 5: Verify Docker Hub Repositories
 
 Ensure these repositories exist in your Docker Hub account (or update the workflow file with your repository names):
 
-- `{DOCKERHUB_USERNAME}/vprofiledb2`
-- `{DOCKERHUB_USERNAME}/vprofileapp2`
-- `{DOCKERHUB_USERNAME}/vprofileweb2`
+- `{DOCKERHUB_USERNAME}/vprofiledb3`
+- `{DOCKERHUB_USERNAME}/vprofileapp3`
+- `{DOCKERHUB_USERNAME}/vprofileweb3`
 
 ## How It Works
 
@@ -153,15 +198,15 @@ The workflow triggers automatically on **every push to the `main` branch**.
 3. **Login to Docker Hub**: Authenticates using `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`
 4. **Extract Short SHA**: Extracts the first 7 characters of the Git commit SHA
 5. **Build and Push Images**: Builds and pushes three Docker images:
-   - Database image: `vprofiledb2:latest` and `vprofiledb2:{sha}`
-   - Application image: `vprofileapp2:latest` and `vprofileapp2:{sha}`
-   - Web image: `vprofileweb2:latest` and `vprofileweb2:{sha}`
+   - Database image: `vprofiledb3:latest` and `vprofiledb3:{sha}`
+   - Application image: `vprofileapp3:latest` and `vprofileapp3:{sha}`
+   - Web image: `vprofileweb3:latest` and `vprofileweb3:{sha}`
 6. **Update ArgoCD Manifests**:
-   - Clones the ArgoCD repository (`OchukoWH/automatic-updates-argo-defs`)
+   - Clones the ArgoCD repository (configured in workflow file)
    - Updates `vprofile/appdeploy.yaml` with the new application image tag
    - Updates `vprofile/dbdeploy.yaml` with the new database image tag
    - Updates `vprofile/webdeploy.yaml` with the new web image tag
-   - Commits and pushes the changes
+   - Commits and pushes the changes back to the ArgoCD repository
 
 ### Image Tagging Strategy
 
@@ -182,21 +227,21 @@ The workflow automatically updates these files in the ArgoCD repository:
 - **`vprofile/dbdeploy.yaml`**: Updates the `image` field for the database deployment
 - **`vprofile/webdeploy.yaml`**: Updates the `image` field for the web/NGINX deployment
 
-The updated image references use the commit SHA tag (e.g., `username/vprofileapp2:a1b2c3d`), ensuring ArgoCD deploys the exact version that was built.
+The updated image references use the commit SHA tag (e.g., `username/vprofileapp3:a1b2c3d`), ensuring ArgoCD deploys the exact version that was built.
 
 ## Docker Images
 
-### Database Image (`vprofiledb2`)
+### Database Image (`vprofiledb3`)
 - **Dockerfile**: `Docker-files/db/Dockerfile`
 - **Context**: `Docker-files/db/`
 - **Base**: MySQL
 
-### Application Image (`vprofileapp2`)
+### Application Image (`vprofileapp3`)
 - **Dockerfile**: `Docker-files/app/multistage/Dockerfile`
 - **Context**: Root directory
 - **Base**: Multi-stage build (Maven → Tomcat)
 
-### Web Image (`vprofileweb2`)
+### Web Image (`vprofileweb3`)
 - **Dockerfile**: `Docker-files/web/Dockerfile`
 - **Context**: `Docker-files/web/`
 - **Base**: NGINX
@@ -245,7 +290,8 @@ The updated image references use the commit SHA tag (e.g., `username/vprofileapp
    - Ensure the token has `repo` scope and access to the ArgoCD repository
 
 2. **Check Repository Access**:
-   - Verify the token can push to `OchukoWH/automatic-updates-argo-defs`
+   - Verify you've updated the ArgoCD repository URLs in the workflow file (Step 4 of setup)
+   - Ensure the `GIT_TOKEN` has write access to your ArgoCD repository
    - Check if the repository exists and is accessible
 
 3. **Check Workflow Logs**:
